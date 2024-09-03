@@ -11,7 +11,7 @@ let nextTicketId = 1;
 async function handle_advance(data) {
   console.log("Received advance request data " + JSON.stringify(data));
   const payloadString = hexToString(data.payload);
-  console.log(Converted payload: ${payloadString});
+  console.log(`Converted payload: ${payloadString}`);
 
   try {
     const payload = JSON.parse(payloadString);
