@@ -11,7 +11,7 @@ let nextTicketId = 1;
 async function handle_advance(data) {
   console.log("Received advance request data " + JSON.stringify(data));
   const payloadString = hexToString(data.payload);
-  console.log(`Converted payload: ${payloadString}`);
+  console.log(Converted payload: ${payloadString});
 
   try {
     const payload = JSON.parse(payloadString);
@@ -19,112 +19,126 @@ async function handle_advance(data) {
 
     switch (payload.action) {
       case "create_event":
-        const eventId = nextEventId++;
-        events[eventId] = {
-          name: payload.name,
-          date: payload.date,
-          venue: payload.venue,
-          totalTickets: payload.totalTickets,
-          availableTickets: payload.totalTickets,
-          ticketPrice: payload.ticketPrice
-        };
-        response = `Event created with ID: ${eventId}`;
+        response = createEvent(payload);
         break;
-
       case "buy_ticket":
-        if (events[payload.eventId] && events[payload.eventId].availableTickets > 0) {
-          const ticketId = nextTicketId++;
-          tickets[ticketId] = {
-            eventId: payload.eventId,
-            owner: payload.buyer,
-            purchaseDate: Date.now()
-          };
-          events[payload.eventId].availableTickets--;
-          response = `Ticket purchased with ID: ${ticketId}`;
-        } else {
-          response = "Event not found or sold out";
-        }
+        response = buyTicket(payload);
         break;
-
       case "get_event_info":
-        if (events[payload.eventId]) {
-          response = JSON.stringify(events[payload.eventId]);
-        } else {
-          response = "Event not found";
-        }
+        response = getEventInfo(payload);
         break;
-
       case "verify_ticket":
-        if (tickets[payload.ticketId] && tickets[payload.ticketId].eventId === payload.eventId) {
-          response = "Ticket is valid";
-        } else {
-          response = "Invalid ticket";
-        }
+        response = verifyTicket(payload);
         break;
-
       default:
         response = "Invalid action";
     }
 
-    const outputStr = stringToHex(response);
-    await fetch(rollup_server + "/notice", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ payload: outputStr }),
-    });
+    const outputStr = stringToHex(JSON.stringify(response));
+    await sendNotice(outputStr);
   } catch (error) {
     console.error("Error processing request:", error);
+    await sendNotice(stringToHex(JSON.stringify({ error: error.message })));
   }
   return "accept";
+}
+
+function createEvent(payload) {
+  const eventId = nextEventId++;
+  events[eventId] = {
+    id: eventId,
+    name: payload.name,
+    date: payload.date,
+    venue: payload.venue,
+    totalTickets: payload.totalTickets,
+    availableTickets: payload.totalTickets,
+    ticketPrice: payload.ticketPrice
+  };
+  return { message: "Event created successfully", eventId };
+}
+
+function buyTicket(payload) {
+  const event = events[payload.eventId];
+  if (!event || event.availableTickets <= 0) {
+    throw new Error("Event not found or sold out");
+  }
+  const ticketId = nextTicketId++;
+  tickets[ticketId] = {
+    id: ticketId,
+    eventId: payload.eventId,
+    owner: payload.buyer,
+    purchaseDate: new Date().toISOString()
+  };
+  event.availableTickets--;
+  return { message: "Ticket purchased successfully", ticketId };
+}
+
+function getEventInfo(payload) {
+  const event = events[payload.eventId];
+  if (!event) {
+    throw new Error("Event not found");
+  }
+  return event;
+}
+
+function verifyTicket(payload) {
+  const ticket = tickets[payload.ticketId];
+  if (!ticket || ticket.eventId !== payload.eventId) {
+    throw new Error("Invalid ticket");
+  }
+  return { message: "Ticket is valid", ticket };
 }
 
 async function handle_inspect(data) {
   console.log("Received inspect request data " + JSON.stringify(data));
 
   const payload = data["payload"];
-  const route = hex2str(payload);
+  const route = hexToString(payload);
 
-  let responseObject;
-  if (route === "list_events") {
-    responseObject = JSON.stringify(Object.values(events));
-  } else if (route === "list_tickets") {
-    const ticketList = [];
-    for (const ticketId in tickets) {
-      ticketList.push(tickets[ticketId]);
-    }
-    responseObject = JSON.stringify(ticketList);
-  } else {
-    responseObject = "Invalid inspection route";
+  let response;
+  switch (route) {
+    case "list_events":
+      response = Object.values(events);
+      break;
+    case "list_tickets":
+      response = Object.values(tickets);
+      break;
+    default:
+      response = { error: "Invalid inspection route" };
   }
 
-  const outputStr = str2hex(responseObject);
-  await fetch(rollup_server + "/report", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ payload: outputStr }),
-  });
+  const outputStr = stringToHex(JSON.stringify(response));
+  await sendReport(outputStr);
 
   return "accept";
 }
 
-var handlers = {
+async function sendNotice(payload) {
+  await fetch(rollup_server + "/notice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payload }),
+  });
+}
+
+async function sendReport(payload) {
+  await fetch(rollup_server + "/report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payload }),
+  });
+}
+
+const handlers = {
   advance_state: handle_advance,
   inspect_state: handle_inspect,
 };
-
-var finish = { status: "accept" };
 
 (async () => {
   while (true) {
     const finish_req = await fetch(rollup_server + "/finish", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "accept" }),
     });
 
@@ -134,8 +148,8 @@ var finish = { status: "accept" };
       console.log("No pending rollup request, trying again");
     } else {
       const rollup_req = await finish_req.json();
-      var handler = handlers[rollup_req["request_type"]];
-      finish["status"] = await handler(rollup_req["data"]);
+      const handler = handlers[rollup_req["request_type"]];
+      await handler(rollup_req["data"]);
     }
   }
 })();
