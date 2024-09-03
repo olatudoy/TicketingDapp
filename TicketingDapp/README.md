@@ -14,9 +14,9 @@ This decentralized application (DApp) implements a ticketing system using Cartes
 
 1. Clone this repository
 2. Install dependencies:
-   
+   ```
    npm install
-   
+   ```
 
 ## Running the DApp
 
@@ -29,7 +29,8 @@ Start the DApp using the Cartesi Rollups environment. Refer to the Cartesi docum
 To interact with the DApp, send a JSON payload with the following structure:
 
 1. Create an event:
-json
+
+```json
 {
   "action": "create_event",
   "name": "Summer Concert",
@@ -38,38 +39,41 @@ json
   "totalTickets": 1000,
   "ticketPrice": 50
 }
-
+```
 
 2. Buy a ticket:
-json
+
+```json
 {
   "action": "buy_ticket",
   "eventId": 1,
   "buyer": "0x1234567890123456789012345678901234567890"
 }
-
+```
 
 3. Get event information:
-json
+
+```json
 {
   "action": "get_event_info",
   "eventId": 1
 }
-
+```
 
 4. Verify a ticket:
-json
+
+```json
 {
   "action": "verify_ticket",
   "eventId": 1,
   "ticketId": 1
 }
-
+```
 
 ### Inspecting State
 
 To inspect the DApp's state, use the following routes:
 
-1. List all events: "list_events" 
+1. List all events: "list_events"
 
 2. List all tickets:"list_tickets"
